@@ -6,7 +6,7 @@ package terminal
 // xterm 的 onData 把按键字节经 WebSocket 送回 PTY，并同步窗口尺寸；退出接管即恢复只读。
 // xterm 资源走 CDN（内网可达）；模型侧 ssh_read 的清洗是后端逻辑，与本页渲染无关。
 const terminalPageHTML = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -129,13 +129,13 @@ const terminalPageHTML = `<!DOCTYPE html>
   <span class="chip"><span id="dot"></span><span id="state">…</span></span>
   <span class="sid" title="__SESSION_ID__">
     <span class="val">__SESSION_ID__</span>
-    <button class="iconbtn" id="copyid" title="复制会话 ID" aria-label="复制会话 ID">
+    <button class="iconbtn" id="copyid" title="Copy session ID" aria-label="Copy session ID">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>
     </button>
   </span>
   <span class="spacer"></span>
-  <span class="held-chip"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></svg>人工操作中</span>
-  <select id="themesel" class="chip" title="配色主题" aria-label="配色主题">
+  <span class="held-chip"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></svg>Human control active</span>
+  <select id="themesel" class="chip" title="Color theme" aria-label="Color theme">
     <option value="catppuccin-mocha">Catppuccin Mocha</option>
     <option value="tokyo-night">Tokyo Night</option>
     <option value="one-dark">One Dark</option>
@@ -144,7 +144,7 @@ const terminalPageHTML = `<!DOCTYPE html>
     <option value="nord">Nord</option>
     <option value="ayu-mirage">Ayu Mirage</option>
   </select>
-  <select id="fontsel" class="chip" title="终端字体" aria-label="终端字体">
+  <select id="fontsel" class="chip" title="Terminal font" aria-label="Terminal font">
     <option value="jetbrains">JetBrains Mono</option>
     <option value="ibmplex">IBM Plex Mono</option>
     <option value="fira">Fira Code</option>
@@ -156,13 +156,13 @@ const terminalPageHTML = `<!DOCTYPE html>
     <option value="dejavu">DejaVu Sans Mono</option>
   </select>
   <span class="stepper">
-    <button id="fdec" title="减小字体" aria-label="减小字体">&#8722;</button>
+    <button id="fdec" title="Decrease font size" aria-label="Decrease font size">&#8722;</button>
     <span id="fsize">14</span>
-    <button id="finc" title="增大字体" aria-label="增大字体">+</button>
+    <button id="finc" title="Increase font size" aria-label="Increase font size">+</button>
   </span>
-  <span id="size" title="终端 列×行"></span>
-  <button id="takeover" aria-label="切换人工接管">
-    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"/></svg>人工接管
+  <span id="size" title="Terminal columns × rows"></span>
+  <button id="takeover" aria-label="Toggle human control">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"/></svg>Take Control
   </button>
 </div>
 <div id="term"><div id="termbody"></div></div>
@@ -238,7 +238,7 @@ const terminalPageHTML = `<!DOCTYPE html>
   }
   var dot = document.getElementById("dot");
   var stateEl = document.getElementById("state");
-  var STATE_LABEL = { disconnected: "已断开连接", reconnecting: "重连中" };
+  var STATE_LABEL = { disconnected: "Disconnected", reconnecting: "Reconnecting" };
   var finished = false; // 已收到终态（disconnected），不再重连
   function setState(st){
     stateEl.textContent = STATE_LABEL[st] || st;
@@ -381,17 +381,17 @@ const terminalPageHTML = `<!DOCTYPE html>
     holdMode = mode;
     held = (mode === "mine");
     if(mode === "mine"){
-      btn.disabled = false; btn.innerHTML = ICON_STOP + "退出接管"; btn.title = "退出人工接管";
+      btn.disabled = false; btn.innerHTML = ICON_STOP + "Release Control"; btn.title = "Release human control";
       document.body.classList.remove("locked"); document.body.classList.add("held");
       openWS(); term.focus();
     } else if(mode === "other"){
       closeWS();
-      btn.disabled = true; btn.innerHTML = ICON_LOCK + "他人接管中";
-      btn.title = "该会话已被其他操作者接管，等其释放后方可接管";
+      btn.disabled = true; btn.innerHTML = ICON_LOCK + "Controlled by another user";
+      btn.title = "This session is controlled by another user. You can take control after they release it.";
       document.body.classList.remove("held"); document.body.classList.add("locked");
     } else {
       closeWS();
-      btn.disabled = false; btn.innerHTML = ICON_PLAY + "人工接管"; btn.title = "";
+      btn.disabled = false; btn.innerHTML = ICON_PLAY + "Take Control"; btn.title = "";
       document.body.classList.remove("held"); document.body.classList.remove("locked");
     }
   }
