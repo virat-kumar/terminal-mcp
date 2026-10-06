@@ -61,3 +61,40 @@ func TestFormatAge(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionAPIListsAndRenames(t *testing.T) {
+	id := openLocalReady(t)
+	defer session.Close(id)
+	if _, ok := session.Rename(id, "Initial name"); !ok {
+		t.Fatal("rename setup failed")
+	}
+
+	h := SessionAPIHandler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/sessions", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"name":"Initial name"`) {
+		t.Fatalf("GET sessions status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/sessions", strings.NewReader(`{"session_id":"`+id+`","name":"Edited in UI"}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"name":"Edited in UI"`) {
+		t.Fatalf("PATCH sessions status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got, _ := session.SessionName(id); got != "Edited in UI" {
+		t.Fatalf("renamed name=%q", got)
+	}
+}
+
+func TestSessionIndexContainsLiveUpdatesAndEditableNames(t *testing.T) {
+	rec := httptest.NewRecorder()
+	SessionIndexHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	page := rec.Body.String()
+	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "Sessions update automatically"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("index missing %q", want)
+		}
+	}
+}

@@ -17,6 +17,7 @@ var theStore *store
 // Session 是一个持久会话。live 句柄 proc 只在内存；元信息可落盘。
 type Session struct {
 	ID         string
+	Name       string
 	Owner      string // 客户端归属签名（见 internal/identity）；空表示无归属（历史/匿名）
 	Host       string
 	Mode       string
@@ -76,6 +77,20 @@ func (s *Session) touch() {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	s.lastUsed = time.Now()
+}
+
+// setName updates the optional human-friendly session name.
+func (s *Session) setName(name string) {
+	s.stateMu.Lock()
+	s.Name = name
+	s.stateMu.Unlock()
+}
+
+// name returns the current human-friendly session name.
+func (s *Session) name() string {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.Name
 }
 
 // idleSince 加 stateMu 读取距上次使用的时长。

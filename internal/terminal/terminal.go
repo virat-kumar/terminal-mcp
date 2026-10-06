@@ -48,6 +48,10 @@ func TerminalHandler() http.Handler {
 			serveTakeover(w, req, strings.Trim(id, "/"))
 			return
 		}
+		if id, ok := strings.CutSuffix(rest, "/name"); ok {
+			serveSessionName(w, req, strings.Trim(id, "/"))
+			return
+		}
 		if id, ok := strings.CutSuffix(rest, "/ws"); ok {
 			serveTerminalInput(w, req, strings.Trim(id, "/"))
 			return
@@ -270,4 +274,35 @@ func serveTerminalPage(w http.ResponseWriter, id string) {
 	page = strings.ReplaceAll(page, "__DEFAULT_THEME__", cfg.DefaultTheme)
 	page = strings.ReplaceAll(page, "__DEFAULT_RENDERER__", cfg.DefaultRenderer)
 	_, _ = w.Write([]byte(page))
+}
+
+func serveSessionName(w http.ResponseWriter, req *http.Request, id string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	switch req.Method {
+	case http.MethodGet:
+		name, ok := session.SessionName(id)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"session_id": id, "name": name})
+	case http.MethodPatch:
+		var in struct {
+			Name string `json:"name"`
+		}
+		if json.NewDecoder(req.Body).Decode(&in) != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		name, ok := session.Rename(id, in.Name)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"session_id": id, "name": name})
+	default:
+		w.Header().Set("Allow", "GET, PATCH")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

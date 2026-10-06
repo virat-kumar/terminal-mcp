@@ -52,6 +52,12 @@ func (s *Session) ReleaseHold(owner string) bool { return s.releaseHold(owner) }
 // HoldOwner 返回当前接管持有者标识（空表示未接管或无归属）。
 func (s *Session) HoldOwner() string { return s.holdOwnerID() }
 
+// Name returns the optional human-friendly session name.
+func (s *Session) NameValue() string { return s.name() }
+
+// SetName updates the optional human-friendly session name.
+func (s *Session) SetName(name string) { s.setName(name) }
+
 // Touch 刷新最近使用时间（导出包装 touch）。
 func (s *Session) Touch() { s.touch() }
 

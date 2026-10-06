@@ -23,6 +23,7 @@ type openInput struct {
 	Mode    string `json:"mode" jsonschema:"session mode: \"local\" (spawn a shell/command on this host) or \"ssh\" (ssh into host and run bash)"`
 	Command string `json:"command,omitempty" jsonschema:"local mode only: optional command to run instead of the default shell; ignored for ssh mode"`
 	Host    string `json:"host,omitempty" jsonschema:"ssh mode only: target host to ssh into; required when mode=ssh, ignored for local mode"`
+	Name    string `json:"name,omitempty" jsonschema:"optional human-friendly name for the terminal session; may be edited later in the web UI"`
 }
 
 type sendInput struct {
@@ -63,13 +64,13 @@ type emptyInput struct{}
 
 // listOutput 包装会话列表：官方 SDK 要求工具输出为 JSON object，顶层数组不被接受。
 type listOutput struct {
-	Sessions []map[string]string `json:"sessions" jsonschema:"active sessions with status snapshot (session_id, host, status, idle_seconds, held)"`
+	Sessions []map[string]string `json:"sessions" jsonschema:"active sessions with status snapshot (session_id, name, host, status, idle_seconds, held)"`
 }
 
 // 工具描述（英文）。涵盖 PTY 会话、local/ssh 模式、
 // 人工接管 held 语义、output 的 tail vs since_last 差异等关键指引。
 const (
-	descOpen = "Start a persistent real PTY session and return {session_id, state, terminal_url}. " +
+	descOpen = "Start a persistent real PTY session and return {session_id, name, state, terminal_url}. An optional name can label the session for humans and can later be edited in the web UI. " +
 		"mode=local spawns a shell (or the given command) on this host; mode=ssh opens 'ssh <host>' running bash (host is required). " +
 		"The session starts in state=loading; poll terminal_status until it becomes idle before interacting. " +
 		"terminal_url is a read-only web terminal a human can open to watch the session live, and optionally 'take over' to type commands manually. " +
@@ -108,7 +109,7 @@ const (
 	descClose = "Close the session, releasing its child process and concurrency slot. " +
 		"If held=true the session is under human takeover: this call was NOT executed; wait until held clears."
 
-	descList = "List all sessions on this instance with their status snapshot (session_id, host, status, idle_seconds, held). " +
+	descList = "List all sessions on this instance with their status snapshot (session_id, name, host, status, idle_seconds, held). " +
 		"held=true means that session is under human takeover; pause write operations until it clears."
 )
 
@@ -169,9 +170,9 @@ func registerTools(server *mcp.Server, a *audit.Logger) {
 			if !ok {
 				return nil, nil, fmt.Errorf("missing required identity header(s): %v", config.Get().Identity.Headers)
 			}
-			res, err := session.Open(in.Mode, in.Command, in.Host, owner)
+			res, err := session.OpenNamed(in.Mode, in.Command, in.Host, owner, in.Name)
 			e := baseEntry(req, "terminal_open", map[string]any{
-				"mode": in.Mode, "host": in.Host, "command": in.Command,
+				"mode": in.Mode, "host": in.Host, "command": in.Command, "name": in.Name,
 			})
 			if err != nil {
 				e.Error = err.Error()

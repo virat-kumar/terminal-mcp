@@ -51,6 +51,9 @@ const terminalPageHTML = `<!DOCTYPE html>
   .sid{display:inline-flex;align-items:center;gap:3px;min-width:0;flex:0 1 auto;color:var(--muted);
     font-family:var(--font-mono);font-size:12px}
   .sid .val{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .session-name{height:var(--ctlh);width:180px;max-width:20vw;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:rgba(255,255,255,0.04);color:var(--text);font:12px/1 var(--font-ui)}
+  .session-name::placeholder{color:var(--muted)}
+  .session-name:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
   .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
     border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:7px;transition:.15s}
   .iconbtn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
@@ -113,7 +116,7 @@ const terminalPageHTML = `<!DOCTYPE html>
   /* On narrow screens, hide secondary controls while keeping status and takeover actions fully visible. */
   @media (max-width:900px){ #size{display:none} }
   @media (max-width:800px){ #fontsel{display:none} }
-  @media (max-width:680px){ #themesel{display:none} .stepper{display:none} }
+  @media (max-width:680px){ #themesel{display:none} .stepper{display:none} .session-name{display:none} }
   @media (max-width:520px){ .sid{display:none} .brand b{display:none} }
 </style>
 </head>
@@ -124,6 +127,7 @@ const terminalPageHTML = `<!DOCTYPE html>
     <b>terminal<span>-mcp</span></b>
   </span>
   <span class="chip"><span id="dot"></span><span id="state">…</span></span>
+  <input id="sessionName" class="session-name" type="text" maxlength="120" placeholder="Unnamed session" aria-label="Session name" title="Edit session name">
   <span class="sid" title="__SESSION_ID__">
     <span class="val">__SESSION_ID__</span>
     <button class="iconbtn" id="copyid" title="Copy session ID" aria-label="Copy session ID">
@@ -172,6 +176,29 @@ const terminalPageHTML = `<!DOCTYPE html>
   // This page is .../terminal/<id>; stream/takeover/ws endpoints live under the same path.
   // Derive the base from location.pathname so mounting prefixes such as /view remain transparent.
   var base = location.pathname.replace(/\/+$/, "");
+  var nameInput = document.getElementById("sessionName");
+  var savedSessionName = "";
+  function loadSessionName(){
+    fetch(base+"/name", {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(); return r.json(); }).then(function(j){
+      savedSessionName = j.name || "";
+      if(document.activeElement !== nameInput) nameInput.value = savedSessionName;
+    }).catch(function(){});
+  }
+  function saveSessionName(){
+    fetch(base+"/name", {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:nameInput.value})})
+      .then(function(r){ if(!r.ok) throw new Error(); return r.json(); })
+      .then(function(j){ savedSessionName=j.name||""; nameInput.value=savedSessionName; })
+      .catch(function(){ nameInput.value=savedSessionName; });
+  }
+  if(nameInput){
+    nameInput.addEventListener("change", saveSessionName);
+    nameInput.addEventListener("keydown", function(e){
+      if(e.key === "Enter"){ e.preventDefault(); nameInput.blur(); }
+      if(e.key === "Escape"){ nameInput.value=savedSessionName; nameInput.blur(); }
+    });
+    loadSessionName();
+    setInterval(loadSessionName, 3000);
+  }
   var term = new Terminal({
     cursorBlink: true, convertEol: false, scrollback: 5000, lineHeight: 1.2, letterSpacing: 0,
     fontFamily: '"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace', fontSize: 14

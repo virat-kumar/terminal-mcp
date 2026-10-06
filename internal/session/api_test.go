@@ -4,6 +4,8 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/fzxbl/terminal-mcp/internal/config"
 )
 
 func TestURLHostPort(t *testing.T) {
@@ -71,5 +73,30 @@ func TestReachableHostPort(t *testing.T) {
 	// 仅当本机探测到具体 IP 时才断言通配 host 已被替换（隔离环境可能无非回环网卡）。
 	if localIP() != "" && strings.HasPrefix(got, "0.0.0.0:") {
 		t.Fatalf("wildcard host should be resolved to a concrete IP, got %q", got)
+	}
+}
+
+func TestOpenNamedAndRename(t *testing.T) {
+	config.Load("")
+	InitStore(10)
+	SetNodeToken("")
+	res, err := OpenNamed("local", "", "", "alice", "  Build logs  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := res["session_id"]
+	defer Close(id)
+	if res["name"] != "Build logs" {
+		t.Fatalf("open name=%q", res["name"])
+	}
+	if got, ok := SessionName(id); !ok || got != "Build logs" {
+		t.Fatalf("SessionName=(%q,%v)", got, ok)
+	}
+	if got, ok := Rename(id, "  Renamed terminal  "); !ok || got != "Renamed terminal" {
+		t.Fatalf("Rename=(%q,%v)", got, ok)
+	}
+	listed := List("alice")
+	if len(listed) != 1 || listed[0]["name"] != "Renamed terminal" {
+		t.Fatalf("List name=%v", listed)
 	}
 }

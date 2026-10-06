@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -90,6 +91,11 @@ func localIP() string {
 	return ""
 }
 
+// Open preserves the original API and starts an unnamed session.
+func Open(mode, command, host, owner string) (map[string]string, error) {
+	return OpenNamed(mode, command, host, owner, "")
+}
+
 // Open 起持久真 PTY 会话，返回内嵌会话 id 与网页终端地址 terminal_url。
 // mode 必须为 local 或 ssh；ssh 模式必须给 host。
 //
@@ -99,7 +105,7 @@ func localIP() string {
 // 用 Status 轮询到 idle/ready 后再交互；terminal_url 供人在浏览器观看并可"人工接管"。
 //
 // Open 起持久真 PTY 会话。owner 为调用方归属签名（见 internal/identity），写入会话用于归属隔离。
-func Open(mode, command, host, owner string) (map[string]string, error) {
+func OpenNamed(mode, command, host, owner, sessionName string) (map[string]string, error) {
 	switch mode {
 	case "local", "ssh":
 	default:
@@ -122,9 +128,11 @@ func Open(mode, command, host, owner string) (map[string]string, error) {
 	}
 	if s := theStore.get(id); s != nil {
 		s.Owner = owner
+		s.setName(normalizeSessionName(sessionName))
 	}
 	return map[string]string{
 		"session_id":   id,
+		"name":         normalizeSessionName(sessionName),
 		"state":        "loading",
 		"terminal_url": terminalURL(id),
 	}, nil
@@ -147,6 +155,7 @@ func List(owner string) []map[string]string {
 		}
 		out = append(out, map[string]string{
 			"session_id":   s.ID,
+			"name":         s.name(),
 			"host":         s.Host,
 			"mode":         s.Mode,
 			"status":       st,
@@ -168,4 +177,39 @@ func Owner(id string) (owner string, found bool) {
 		return "", false
 	}
 	return s.Owner, true
+}
+
+// Rename updates the human-friendly name of a live session.
+func Rename(id, name string) (string, bool) {
+	if theStore == nil {
+		return "", false
+	}
+	s := theStore.get(id)
+	if s == nil {
+		return "", false
+	}
+	n := normalizeSessionName(name)
+	s.setName(n)
+	return n, true
+}
+
+// SessionName returns the current human-friendly name for a live session.
+func SessionName(id string) (string, bool) {
+	if theStore == nil {
+		return "", false
+	}
+	s := theStore.get(id)
+	if s == nil {
+		return "", false
+	}
+	return s.name(), true
+}
+
+func normalizeSessionName(name string) string {
+	name = strings.TrimSpace(name)
+	r := []rune(name)
+	if len(r) > 120 {
+		name = string(r[:120])
+	}
+	return name
 }

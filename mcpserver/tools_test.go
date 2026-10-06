@@ -69,6 +69,11 @@ func TestExploreToolSchemaSplit(t *testing.T) {
 		}
 	}
 
+	op, ok := schemas["terminal_open"]
+	if !ok || !strings.Contains(op, `"name":`) {
+		t.Fatalf("terminal_open schema missing optional name: %s", op)
+	}
+
 	rd, ok := schemas["terminal_output"]
 	if !ok {
 		t.Fatalf("terminal_output not registered")
