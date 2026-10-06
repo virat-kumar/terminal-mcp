@@ -30,6 +30,7 @@ type sessionIndexData struct {
 
 var sessionIndexTemplate = template.Must(template.New("session-index").Parse(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/favicon.png">
 <title>terminal-mcp sessions</title>
 <style>
 :root{color-scheme:dark;--bg:#11111b;--panel:#181825;--panel2:#1e1e2e;--border:#313244;--text:#cdd6f4;--muted:#a6adc8;--accent:#89b4fa;--green:#a6e3a1;--yellow:#f9e2af;--red:#f38ba8;--purple:#cba6f7}
@@ -40,7 +41,7 @@ var sessionIndexTemplate = template.Must(template.New("session-index").Parse(`<!
 .status{display:inline-flex;align-items:center;gap:7px;text-transform:capitalize}.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}.ready .dot,.idle .dot{background:var(--green)}.running .dot{background:var(--accent)}.loading .dot{background:var(--purple)}.dead .dot,.closed .dot{background:var(--red)}.held{display:inline-block;margin-left:8px;padding:2px 7px;border-radius:999px;background:rgba(249,226,175,.12);border:1px solid rgba(249,226,175,.32);color:var(--yellow);font-size:11px;font-weight:600}.muted{color:var(--muted)}.empty{padding:44px 20px;text-align:center;color:var(--muted)}
 @media(max-width:900px){main{padding:24px 12px 48px}.panel{overflow-x:auto}table{min-width:980px}header{padding:0 4px}}
 </style></head><body><main>
-<header><div><h1>Terminal Sessions</h1><p>Sessions update automatically. Names are optional and editable.</p></div><span class="live"><i></i><span id="liveText">Live</span></span></header>
+<header><div><h1>Terminal Sessions</h1><p>Session List</p></div><span class="live"><i></i><span id="liveText">Live</span></span></header>
 <div class="panel"><table id="sessionTable"{{if not .Sessions}} style="display:none"{{end}}><thead><tr><th>Name</th><th>Session</th><th>Status</th><th>Mode</th><th>Host</th><th>Last activity</th><th>Created</th></tr></thead><tbody id="sessionBody">
 {{range .Sessions}}<tr data-session-id="{{.SessionID}}"><td><input class="name-input" value="{{.Name}}" placeholder="Unnamed session" maxlength="120" aria-label="Session name"></td><td class="session"><a href="{{.Href}}" title="Open terminal">{{.SessionID}}</a>{{if .Held}}<span class="held">Human control</span>{{end}}</td><td><span class="status {{.Status}}"><span class="dot"></span>{{.Status}}</span></td><td>{{.Mode}}</td><td>{{if .Host}}{{.Host}}{{else}}<span class="muted">local</span>{{end}}</td><td>{{.Idle}}</td><td>{{.Created}}</td></tr>{{end}}
 </tbody></table><div id="emptyState" class="empty"{{if .Sessions}} style="display:none"{{end}}>No terminal sessions are active on this instance yet.</div></div>

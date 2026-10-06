@@ -52,6 +52,8 @@ func NewHTTPHandler(auditWriter io.Writer) http.Handler {
 	// 外围加 /view 前缀：StripPrefix 剥掉后交给按 /terminal/ 解析的 handler。
 	mux.Handle("/view/terminal/", http.StripPrefix("/view", terminal.TerminalHandler()))
 	mux.Handle("/api/sessions", terminal.SessionAPIHandler())
+	mux.Handle("/favicon.png", terminal.FaviconHandler())
+	mux.Handle("/favicon.ico", terminal.FaviconHandler())
 	mux.Handle("/", terminal.SessionIndexHandler())
 	return mux
 }

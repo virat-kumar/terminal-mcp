@@ -92,9 +92,23 @@ func TestSessionIndexContainsLiveUpdatesAndEditableNames(t *testing.T) {
 	rec := httptest.NewRecorder()
 	SessionIndexHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	page := rec.Body.String()
-	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "Sessions update automatically"} {
+	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "Session List"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("index missing %q", want)
 		}
+	}
+}
+
+func TestFaviconHandler(t *testing.T) {
+	rec := httptest.NewRecorder()
+	FaviconHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/favicon.png", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("favicon status=%d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("favicon content-type=%q", ct)
+	}
+	if rec.Body.Len() == 0 {
+		t.Fatal("favicon body is empty")
 	}
 }
