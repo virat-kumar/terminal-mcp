@@ -41,9 +41,9 @@ type ExploreResult struct {
 }
 
 // heldMsg 是人工接管期间拦截模型写操作的统一提示。
-const heldMsg = "会话被人工接管中，暂不能 send/close/control。建议持续用 ssh_read（mode=since_last）观察：" +
-	"接管期间 read 会把人输入的每条命令还原成 \"[rc=n] $ 命令\" 连同输出一并返回，可据此学习排查步骤。" +
-	"你也可以先去做其他任务或等待，待 held 变为 false（人退出接管）后再继续操作。"
+const heldMsg = "This session is under human control, so send/close/control are temporarily unavailable. " +
+	"Keep observing with terminal_output(mode=since_last): while takeover is active, output reconstructs each human-entered command " +
+	"as \"[rc=n] $ command\" together with its output. You can work on something else or wait until held becomes false, then continue."
 
 // selfAddr 返回本实例监听地址（取配置 listen_addr）。
 func selfAddr() string { return config.Get().ListenAddr }
@@ -84,7 +84,7 @@ func promptLineStart(proc *pty.ProcSession) int64 {
 func startSession(id, host, mode, name string, args []string) (*Session, error) {
 	sess := &Session{ID: id, Host: host, Mode: mode, Status: "loading"}
 	if !theStore.add(sess) {
-		return nil, fmt.Errorf("已达并发上限 %d", config.Get().MaxSessions)
+		return nil, fmt.Errorf("maximum concurrent sessions reached: %d", config.Get().MaxSessions)
 	}
 	logPath, ok := pty.TranscriptPath(config.Get().TranscriptDir, id)
 	if !ok {
@@ -263,7 +263,7 @@ func sendWithRearm(sess *Session, proc *pty.ProcSession, input string, start int
 	sess.setBase(arm)
 	if !armed {
 		// 目标非 bash（sh/zsh 等）：一次性降级提示，绝不反复注入 PS1=。
-		note := "[进入非 bash shell，命令边界检测降级；可 terminal_control(rearm) 或退出该 shell]"
+		note := "[Entered a non-bash shell; command-boundary detection is degraded. Use terminal_control(rearm) or exit that shell.]"
 		if out != "" {
 			out += "\n" + note
 		} else {
@@ -350,7 +350,7 @@ func Read(id string, a ReadArgs) Envelope {
 		env.Truncated = true
 		// tail 不做 spill：明确告诉调用方，要拿完整输出必须改用 since_last。
 		env.Output += fmt.Sprintf(
-			"\n[tail 仅显示尾部约 %d 字节，前面还有约 %d 字节未展示；要拿完整输出请改用 mode=since_last]",
+			"\n[tail shows only the last ~%d bytes; ~%d earlier bytes are omitted. Use mode=since_last for the complete output.]",
 			config.Get().TailBytes, visible-tb)
 	}
 	return env
@@ -623,7 +623,7 @@ func finalizeScope(output string, from, to int64, state, prompt string, code *in
 		if len(preview) > previewMax {
 			preview = preview[:previewMax]
 		}
-		env.Output = fmt.Sprintf("%s\n[输出 %d 字节超过上限，仅显示头部；用 terminal_explore(output_ref=..., op=stat|grep|read) 探索完整内容]", preview, to-from)
+		env.Output = fmt.Sprintf("%s\n[Output of %d bytes exceeds the display limit; only the beginning is shown. Use terminal_explore(output_ref=..., op=stat|grep|read) to inspect the full result.]", preview, to-from)
 		env.OutputRef = outputref.Sign(outputref.Scope{From: from, To: to, Input: input, Observe: observe})
 		env.OutputSizeBytes = to - from
 		env.Truncated = true

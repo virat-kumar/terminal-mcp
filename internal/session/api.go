@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/fzxbl/terminal-mcp/internal/config"
 )
@@ -147,8 +148,10 @@ func List(owner string) []map[string]string {
 		out = append(out, map[string]string{
 			"session_id":   s.ID,
 			"host":         s.Host,
+			"mode":         s.Mode,
 			"status":       st,
 			"idle_seconds": strconv.Itoa(int(s.idleSince().Seconds())),
+			"created_at":   s.CreatedAt.UTC().Format(time.RFC3339Nano),
 			"held":         held,
 		})
 	}

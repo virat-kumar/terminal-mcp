@@ -28,14 +28,17 @@ func TestURLHostPort(t *testing.T) {
 func TestListFilfersByOwner(t *testing.T) {
 	InitStore(10)
 	SetNodeToken("")
-	a := &Session{ID: "a", Owner: "alice", Status: "ready"}
-	b := &Session{ID: "b", Owner: "bob", Status: "ready"}
+	a := &Session{ID: "a", Owner: "alice", Mode: "local", Status: "ready"}
+	b := &Session{ID: "b", Owner: "bob", Mode: "local", Status: "ready"}
 	theStore.add(a)
 	theStore.add(b)
 
 	got := List("alice")
 	if len(got) != 1 || got[0]["session_id"] != "a" {
 		t.Fatalf("List(alice) = %v", got)
+	}
+	if got[0]["mode"] == "" || got[0]["created_at"] == "" {
+		t.Fatalf("List(alice) missing index metadata: %v", got[0])
 	}
 }
 

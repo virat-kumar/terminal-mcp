@@ -1,10 +1,10 @@
 package terminal
 
-// terminalPageHTML 网页终端。占位符 __SESSION_ID__ 会被替换为会话 id。
-// 用 xterm.js（真正的终端模拟器）渲染 SSE 推来的原始字节流：光标、行编辑（退格）、颜色、
-// 光标定位、备用屏（vim/top/less）都能正确处理。人点「人工接管」后进入可输入态，
-// xterm 的 onData 把按键字节经 WebSocket 送回 PTY，并同步窗口尺寸；退出接管即恢复只读。
-// xterm 资源走 CDN（内网可达）；模型侧 ssh_read 的清洗是后端逻辑，与本页渲染无关。
+// terminalPageHTML is the browser terminal page. __SESSION_ID__ is replaced with the session ID.
+// xterm.js renders the raw bytes received over SSE, including cursor movement, line editing, colors,
+// cursor positioning, and alternate-screen apps such as vim/top/less. Take Control enables keyboard input.
+// xterm onData sends keystrokes back to the PTY over WebSocket and keeps terminal size synchronized.
+// xterm assets are loaded from a CDN; model-side output cleaning is handled separately in the backend.
 const terminalPageHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -89,16 +89,14 @@ const terminalPageHTML = `<!DOCTYPE html>
   #takeover:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   #takeover svg{width:13px;height:13px;flex:0 0 auto}
   body.held #takeover{background:var(--danger);color:#fff}
-  /* 他人接管中：按钮禁用为中性锁定态，防止第二人误触发接管 */
+  /* Another operator has control: keep the button disabled to prevent a second takeover. */
   #takeover:disabled{cursor:not-allowed;background:rgba(255,255,255,0.06);color:var(--muted);
     border-color:var(--border);box-shadow:none;filter:none}
 
   #term{position:fixed;top:calc(var(--h) + 14px);left:16px;right:16px;bottom:16px;z-index:10;
     padding:12px 14px;background:var(--termbg);border:1px solid var(--border);border-radius:var(--radius);
     box-shadow:0 12px 40px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.02);overflow:hidden}
-  /* xterm 挂载到无 padding 的内层：FitAddon 按父元素 clientHeight 估行数，若父元素含 padding
-     会把 padding 也算作可用高度、多估约 1 行导致最后一行被裁。内层填满 #term 内容盒且自身无
-     padding，行数才算准，最后一行完整可见；视觉留白由 #term 的 padding 提供。 */
+  /* Mount xterm in a padding-free inner container so FitAddon calculates rows from the true content height. */
   #termbody{width:100%;height:100%}
 
   .s-loading{background:var(--purple)!important;box-shadow:0 0 8px var(--purple)}
@@ -112,8 +110,7 @@ const terminalPageHTML = `<!DOCTYPE html>
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 
-  /* 窄屏自适应：控制栏项均不换行、不压缩（flex:0 0 auto），窗口变窄时按重要性依次隐藏次要控件，
-     始终保住状态、接管按钮完整可见，避免按钮/状态文字被挤出形状边界。 */
+  /* On narrow screens, hide secondary controls while keeping status and takeover actions fully visible. */
   @media (max-width:900px){ #size{display:none} }
   @media (max-width:800px){ #fontsel{display:none} }
   @media (max-width:680px){ #themesel{display:none} .stepper{display:none} }
@@ -172,8 +169,8 @@ const terminalPageHTML = `<!DOCTYPE html>
 <script>
 (function(){
   var id = "__SESSION_ID__";
-  // 本页地址即 .../terminal/<id>，子资源（stream/takeover/ws）在其下。
-  // 基于 location.pathname 推导，与挂载前缀（/terminal 或外围加的 /view 等）解耦。
+  // This page is .../terminal/<id>; stream/takeover/ws endpoints live under the same path.
+  // Derive the base from location.pathname so mounting prefixes such as /view remain transparent.
   var base = location.pathname.replace(/\/+$/, "");
   var term = new Terminal({
     cursorBlink: true, convertEol: false, scrollback: 5000, lineHeight: 1.2, letterSpacing: 0,
@@ -182,8 +179,8 @@ const terminalPageHTML = `<!DOCTYPE html>
   var fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById("termbody"));
-  // 渲染器：默认 DOM（浏览器原生文本，Windows ClearType 亚像素抗锯齿最锐利，低分屏更清晰）；
-  // 配置 default_renderer=webgl 时启用 GPU 渲染（高分屏/retina 更佳），不可用/上下文丢失自动回退 DOM。
+  // Renderer: DOM by default for crisp native browser text rendering.
+  // If default_renderer=webgl, use GPU rendering and fall back to DOM if unavailable or context is lost.
   if("__DEFAULT_RENDERER__" === "webgl"){
     try{
       if(window.WebglAddon){
@@ -196,12 +193,12 @@ const terminalPageHTML = `<!DOCTYPE html>
   var sizeEl = document.getElementById("size");
   function showSize(){ if(sizeEl) sizeEl.textContent = term.cols + "×" + term.rows; }
   function refit(){ try{ fit.fit(); }catch(e){} showSize(); }
-  // 首次布局/字体稳定后再 fit，避免 open 后立即 fit 拿到未就绪尺寸导致 PTY 尺寸不同步。
+  // Fit only after initial layout and fonts settle so the PTY receives the correct dimensions.
   refit();
   setTimeout(refit, 0);
   setTimeout(refit, 200);
 
-  // Ctrl/Cmd+C 有选区时复制（否则照常发 ^C 中断）；Ctrl/Cmd+V 粘贴。
+  // Ctrl/Cmd+C copies when text is selected; otherwise it still sends ^C. Ctrl/Cmd+V pastes.
   function fallbackCopy(t){
     try{ var ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0";
       document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
@@ -216,7 +213,7 @@ const terminalPageHTML = `<!DOCTYPE html>
     var mod = e.ctrlKey || e.metaKey;
     if(mod && !e.shiftKey && (e.key === "c" || e.key === "C") && term.hasSelection()){
       copyText(term.getSelection());
-      return false; // 有选区：复制而非发 ^C
+      return false; // Selection exists: copy instead of sending ^C.
     }
     if(mod && !e.shiftKey && (e.key === "v" || e.key === "V")){
       if(navigator.clipboard && navigator.clipboard.readText){
@@ -225,7 +222,7 @@ const terminalPageHTML = `<!DOCTYPE html>
         }).catch(function(){});
         return false;
       }
-      return true; // 无 clipboard API（多为 http）：交给右键/Ctrl+Shift+V 的原生 paste 事件
+      return true; // Without the Clipboard API, fall back to the browser/native paste event.
     }
     return true;
   });
@@ -239,22 +236,22 @@ const terminalPageHTML = `<!DOCTYPE html>
   var dot = document.getElementById("dot");
   var stateEl = document.getElementById("state");
   var STATE_LABEL = { disconnected: "Disconnected", reconnecting: "Reconnecting" };
-  var finished = false; // 已收到终态（disconnected），不再重连
+  var finished = false; // Final disconnected state received; do not reconnect.
   function setState(st){
     stateEl.textContent = STATE_LABEL[st] || st;
     dot.className = "s-" + st;
     if(st === "disconnected"){
       finished = true;
       var tk = document.getElementById("takeover");
-      if(tk) tk.style.display = "none";        // 历史会话不可接管
+      if(tk) tk.style.display = "none";        // Historical sessions cannot be taken over.
       document.body.classList.remove("held");
-      try{ es.close(); }catch(e){}             // 停止 SSE，避免重连
+      try{ es.close(); }catch(e){}             // Stop SSE to prevent reconnects.
     }
   }
 
-  // ---- 人工接管：切换开关 + WebSocket 输入 ----
-  // 浏览器签名：每浏览器一枚稳定 token（localStorage 持久），用于服务端单人持有校验，
-  // 保证同一会话同一时刻仅一名操作者可写；他人只能在持有者释放后再接管。
+  // ---- Human takeover: toggle control + WebSocket input ----
+  // Browser signature: a stable token stored in localStorage for single-operator ownership checks.
+  // Only one operator may write to a session at a time; others must wait until control is released.
   function browserToken(){
     var k="terminal_mcp_owner", t="";
     try{ t=localStorage.getItem(k)||""; }catch(e){}
@@ -276,9 +273,9 @@ const terminalPageHTML = `<!DOCTYPE html>
     if(ws && ws.readyState === 1 && term.cols > 0 && term.rows > 0)
       ws.send(JSON.stringify({t:"resize", cols:term.cols, rows:term.rows}));
   }
-  term.onResize(function(){ showSize(); sendResize(); }); // xterm 尺寸变化即同步到 PTY
+  term.onResize(function(){ showSize(); sendResize(); }); // Keep PTY size synchronized with xterm.
 
-  // ---- 字体 / 字号 / 配色主题：控制栏可调，localStorage 持久，默认值由服务端配置注入 ----
+  // ---- Font, font size, and theme controls; preferences persist in localStorage ----
   var FONTS = {
     jetbrains: '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
     ibmplex:   '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace',
@@ -290,7 +287,7 @@ const terminalPageHTML = `<!DOCTYPE html>
     menlo:     '"SF Mono", Menlo, Monaco, ui-monospace, monospace',
     dejavu:    '"DejaVu Sans Mono", ui-monospace, monospace'
   };
-  // 主题：ui 为控制栏配色，term 为 xterm 配色；均为不透明底色以保证文本亚像素抗锯齿清晰。
+  // Theme contains UI chrome colors and terminal colors; opaque backgrounds keep text rendering crisp.
   function ansi(a){ return {black:a[0],red:a[1],green:a[2],yellow:a[3],blue:a[4],magenta:a[5],cyan:a[6],white:a[7],
     brightBlack:a[8],brightRed:a[9],brightGreen:a[10],brightYellow:a[11],brightBlue:a[12],brightMagenta:a[13],brightCyan:a[14],brightWhite:a[15]}; }
   function mkTheme(bg,fg,cur,sel,a){ var t=ansi(a); t.background=bg; t.foreground=fg; t.cursor=cur; t.cursorAccent=bg; t.selectionBackground=sel; return t; }
@@ -346,7 +343,7 @@ const terminalPageHTML = `<!DOCTYPE html>
     try{ localStorage.setItem(LS_THEME, key); }catch(e){}
     refit();
   }
-  // 默认值：服务端配置注入，用户 localStorage 偏好优先。
+  // Defaults come from server config, with localStorage preferences taking precedence.
   var savedFont="__DEFAULT_FONT__", savedSize=parseInt("__DEFAULT_FSIZE__",10)||14, savedTheme="__DEFAULT_THEME__";
   try{
     savedFont = localStorage.getItem(LS_FONT) || savedFont;
@@ -359,7 +356,7 @@ const terminalPageHTML = `<!DOCTYPE html>
   if(fdec) fdec.addEventListener("click", function(){ applyFontSize((term.options.fontSize||14)-1); });
   if(finc) finc.addEventListener("click", function(){ applyFontSize((term.options.fontSize||14)+1); });
   applyTheme(savedTheme);
-  // webfont 就绪后再套用字体，避免 canvas 用 fallback 字体测量后不刷新
+  // Apply webfonts only after they are ready so canvas measurements do not use a stale fallback font.
   if(document.fonts && document.fonts.ready){
     document.fonts.ready.then(function(){ applyFont(savedFont); applyFontSize(savedSize); });
   } else {
@@ -370,11 +367,11 @@ const terminalPageHTML = `<!DOCTYPE html>
       {method:"POST", headers:{"Content-Type":"application/json"},
        body:JSON.stringify({on:on, owner:owner, cols:term.cols, rows:term.rows})})
      .then(function(r){ return r.json(); })
-     .then(function(j){ applyState(!!j.held, !!j.mine); }) // 200/409 均回传 {held,mine}
+     .then(function(j){ applyState(!!j.held, !!j.mine); }) // Both 200 and 409 return {held,mine}.
      .catch(function(){});
   }
-  // applyState 依据服务端权威状态切三态：mine=本人接管、other=他人接管（禁用按钮）、free=空闲。
-  // 用 holdMode 去重，避免轮询重复触发 openWS/focus 打断本地操作。
+  // applyState maps authoritative server state to mine / other / free UI modes.
+  // holdMode prevents polling from repeatedly reopening WebSocket/focus and interrupting local work.
   function applyState(isHeld, mine){
     var mode = (isHeld && mine) ? "mine" : (isHeld ? "other" : "free");
     if(mode === holdMode) return;
@@ -405,11 +402,11 @@ const terminalPageHTML = `<!DOCTYPE html>
   function closeWS(){ if(ws){ try{ ws.close(); }catch(e){} ws = null; } }
   btn.addEventListener("click", function(){ if(!btn.disabled) setTakeover(!held); });
 
-  // 输入只在接管态转发到 PTY；非接管态 xterm 仍可选中/滚动，但不写回。
+  // Forward input to the PTY only while this browser holds control; otherwise xterm stays read-only.
   term.onData(function(d){ if(held && ws && ws.readyState === 1) ws.send(JSON.stringify({t:"in", d:d})); });
   window.addEventListener("resize", refit);
 
-  // 接管是服务端会话级状态，非本窗口私有：加载时同步一次，并轮询保持三态 UI 与他人接管态实时一致。
+  // Takeover is session-wide server state; sync on load and poll so all windows stay consistent.
   function syncTakeover(){
     if(finished) return;
     fetch(base+"/takeover?owner="+encodeURIComponent(owner))
@@ -420,7 +417,7 @@ const terminalPageHTML = `<!DOCTYPE html>
   syncTakeover();
   setInterval(syncTakeover, 2500);
 
-  // ---- 输出：SSE 原始字节直接喂给 xterm ----
+  // ---- Output: feed raw SSE bytes directly into xterm ----
   var es = new EventSource(base + "/stream");
   es.addEventListener("data", function(e){ term.write(b64ToBytes(e.data)); });
   es.addEventListener("state", function(e){ setState(e.data); });
