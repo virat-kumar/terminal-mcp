@@ -538,33 +538,7 @@ func Control(id, key string) Envelope {
 		state, prompt, code := computeState(sess)
 		return finalize("", 0, 0, state, prompt, code)
 	case "hard":
-		old := sess.getProc()
-		if old != nil {
-			old.Close()
-		}
-		logPath, ok := pty.TranscriptPath(config.Get().TranscriptDir, id)
-		if !ok {
-			sess.setStatus("dead", "invalid session id for transcript path")
-			return Envelope{State: "dead", Error: "invalid session id"}
-		}
-		p, err := pty.NewProcSession(logPath, config.Get().MaxBufferBytes, sess.reopenName, sess.reopenArgs...)
-		if err != nil {
-			sess.setStatus("dead", err.Error())
-			return Envelope{State: "dead", Error: err.Error()}
-		}
-		sess.setProc(p)
-		// 先写初始化脚本并等自家哨兵，再设 base/delivered：初始化脚本（哨兵 PS1 + 重注入的 ulimit +
-		// init_commands）回显属布哨噪声，对模型透明。armed 时设到新提示符行首（隐藏噪声又保留提示符），
-		// 否则推到末尾；两者都在当前末尾附近，delivered 不会回退。
-		armStart := p.Len()
-		p.Write(sessionInitScript() + "\n")
-		armed := waitForBashSentinelSince(p, armStart, time.Now().Add(rearmTimeout()))
-		arm := p.Len()
-		if armed {
-			arm = promptLineStart(p)
-		}
-		sess.setBase(arm)
-		sess.setDelivered(arm)
+		return hardRestart(sess)
 	default:
 		b, ok := controlKeys[key]
 		if !ok {
@@ -577,6 +551,36 @@ func Control(id, key string) Envelope {
 		proc.Write(string([]byte{b}))
 	}
 	time.Sleep(time.Duration(config.Get().QuietWindowMs) * time.Millisecond)
+	state, prompt, code := computeState(sess)
+	return finalize("", 0, 0, state, prompt, code)
+}
+
+func hardRestart(sess *Session) Envelope {
+	old := sess.getProc()
+	if old != nil {
+		old.Close()
+	}
+	logPath, ok := pty.TranscriptPath(config.Get().TranscriptDir, sess.ID)
+	if !ok {
+		sess.setStatus("dead", "invalid session id for transcript path")
+		return Envelope{State: "dead", Error: "invalid session id"}
+	}
+	p, err := pty.NewProcSession(logPath, config.Get().MaxBufferBytes, sess.reopenName, sess.reopenArgs...)
+	if err != nil {
+		sess.setStatus("dead", err.Error())
+		return Envelope{State: "dead", Error: err.Error()}
+	}
+	sess.setProc(p)
+	armStart := p.Len()
+	p.Write(sessionInitScript() + "\n")
+	armed := waitForBashSentinelSince(p, armStart, time.Now().Add(rearmTimeout()))
+	arm := p.Len()
+	if armed {
+		arm = promptLineStart(p)
+	}
+	sess.setBase(arm)
+	sess.setDelivered(arm)
+	sess.setStatus("ready", "")
 	state, prompt, code := computeState(sess)
 	return finalize("", 0, 0, state, prompt, code)
 }

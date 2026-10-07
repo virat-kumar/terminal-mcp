@@ -92,7 +92,7 @@ func TestSessionIndexContainsLiveUpdatesAndEditableNames(t *testing.T) {
 	rec := httptest.NewRecorder()
 	SessionIndexHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	page := rec.Body.String()
-	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "Session List"} {
+	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "Session List", "Force one terminal", "themeToggle", "Light mode", "terminal_mcp_index_theme"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("index missing %q", want)
 		}
@@ -110,5 +110,42 @@ func TestFaviconHandler(t *testing.T) {
 	}
 	if rec.Body.Len() == 0 {
 		t.Fatal("favicon body is empty")
+	}
+}
+
+func TestSessionAPITogglesSingleTerminalModeWithoutNewRoute(t *testing.T) {
+	t.Setenv("TERMINAL_MCP_UI_STATE_DIR", t.TempDir())
+	session.InitStore(3)
+	defer func() {
+		_ = session.SetSingleTerminalMode(false)
+		session.Shutdown()
+	}()
+
+	first := openLocalReady(t)
+	time.Sleep(10 * time.Millisecond)
+	second := openLocalReady(t)
+	if first == second {
+		t.Fatal("expected distinct baseline sessions")
+	}
+
+	h := SessionAPIHandler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/sessions", strings.NewReader(`{"single_terminal_mode":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("toggle status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"single_terminal_mode":true`) {
+		t.Fatalf("toggle response missing enabled state: %s", rec.Body.String())
+	}
+	if got := len(session.List("")); got != 1 {
+		t.Fatalf("toggle did not enforce one session, got %d", got)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/sessions", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"single_terminal_mode":true`) {
+		t.Fatalf("GET state status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
