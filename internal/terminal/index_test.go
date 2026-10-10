@@ -92,7 +92,7 @@ func TestSessionIndexContainsLiveUpdatesAndEditableNames(t *testing.T) {
 	rec := httptest.NewRecorder()
 	SessionIndexHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	page := rec.Body.String()
-	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "Session List", "Force one terminal", "themeToggle", "Light mode", "terminal_mcp_index_theme"} {
+	for _, want := range []string{"name-input", "/api/sessions", "setInterval(sync,2000)", "rankByActivity", "list=rankByActivity(list)", "Session List", "Force one terminal", "themeToggle", "Light mode", "terminal_mcp_index_theme"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("index missing %q", want)
 		}
