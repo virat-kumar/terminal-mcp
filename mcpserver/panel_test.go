@@ -38,6 +38,9 @@ func TestPanelMCPDiscovery(t *testing.T) {
 		if tool["name"] == "terminal_monitor" {
 			found = true
 			meta := tool["_meta"].(map[string]any)
+			if ext, ok := meta["openai/ui"].(map[string]any); !ok || len(ext["entrypoints"].([]any)) != 1 || ext["entrypoints"].([]any)[0].(map[string]any)["type"] != "thread" {
+				t.Fatal("thread panel entrypoint missing")
+			}
 			if meta["openai/outputTemplate"] != panelURI {
 				t.Fatalf("bad UI template: %v", meta)
 			}
@@ -55,7 +58,7 @@ func TestPanelMCPDiscovery(t *testing.T) {
 	}
 	contents := request("resources/read", map[string]any{"uri": panelURI})["contents"].([]any)
 	html := contents[0].(map[string]any)["text"].(string)
-	for _, needle := range []string{"Ubuntu Terminal Monitor", "ui/initialize", "appCapabilities", "terminal_list", "terminal_output", "mode:'tail'"} {
+	for _, needle := range []string{"Ubuntu Terminal Monitor", "ui/initialize", "appInfo", "appCapabilities", "terminal_list", "terminal_output", "mode:'tail'"} {
 		if !bytes.Contains([]byte(html), []byte(needle)) {
 			t.Errorf("panel HTML missing %s", needle)
 		}
