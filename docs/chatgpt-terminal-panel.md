@@ -34,3 +34,7 @@ requires a pasted capability for rename/single-terminal mutations and keeps
 the key only in the current DOM; it is not stored in localStorage.
 Under single-terminal mode, reconnecting to an existing PTY requires its
 existing key rather than minting a new key or resetting the shell.
+
+## Embedded resource versioning
+
+Monitor v3 supersedes v2. Versioning the MCP Apps resource URI is necessary when ChatGPT clients cache previously connected UI metadata; the viewer must still be reloaded or the plugin reconnected when an older resource persists.
