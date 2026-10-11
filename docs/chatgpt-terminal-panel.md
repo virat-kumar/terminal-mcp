@@ -21,3 +21,7 @@ This integration is read-only and maintains the existing Terminal MCP routes and
 4. When productionizing, save the original binary, deploy via an independent systemd job, verify the service and connector, and keep an automatic rollback timer until checks succeed.
 
 Production runs through `terminal-mcp.service`; do not alter existing Tailscale Serve rules, desktop/Wayland settings, or unrelated MCP services as part of this change.
+
+## Cache invalidation
+
+Monitor v2 has a distinct MCP Apps resource URI. Version the URI whenever the embedded HTML changes: some ChatGPT clients cache the HTML resource for an existing URI, which can otherwise display old buttons after a server upgrade.

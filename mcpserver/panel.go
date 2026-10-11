@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const panelURI = "ui://terminal-mcp/monitor-v1.html"
+const panelURI = "ui://terminal-mcp/monitor-v2.html"
 
 // The app is intentionally read-only. It never sends input or takeover commands.
 const panelHTML = `<!doctype html>
@@ -156,7 +156,7 @@ select.addEventListener('change',e=>{manuallySelected=true;showSession(e.target.
 refreshButton.addEventListener('click',()=>refresh());
 followButton.addEventListener('click',()=>setFollow(!follow));
 send('ui/initialize',{protocolVersion:'2026-01-26',
-  appInfo:{name:'terminal-monitor',version:'1.1.0'},
+  appInfo:{name:'terminal-monitor',version:'1.2.0'},
   appCapabilities:{availableDisplayModes:['inline','fullscreen']}})
 .then(()=>{
   parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},origin);
