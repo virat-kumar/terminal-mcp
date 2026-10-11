@@ -175,12 +175,22 @@ func panelMeta() mcp.Meta {
 }
 
 func registerPanel(server *mcp.Server) {
-	server.AddResource(&mcp.Resource{
-		URI: panelURI, Name: "terminal-monitor", Title: "Terminal Monitor",
-		MIMEType: "text/html;profile=mcp-app", Description: "Read-only live terminal monitor with default follow and automatic active-session selection",
-	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: panelURI, MIMEType: "text/html;profile=mcp-app", Text: panelHTML}}}, nil
-	})
+	// Older ChatGPT plugin registrations may retain v1 or v3 resource URIs.
+	// Always serve the current Follow-enabled UI under these compatibility URIs.
+	for _, resourceURI := range []string{panelURI,
+		"ui://terminal-mcp/monitor-v1.html",
+		"ui://terminal-mcp/monitor-v3.html"} {
+		uri := resourceURI
+		server.AddResource(&mcp.Resource{
+			URI: uri, Name: "terminal-monitor", Title: "Terminal Monitor",
+			MIMEType:    "text/html;profile=mcp-app",
+			Description: "Read-only terminal monitor with Follow and Refresh",
+		}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
+				URI: uri, MIMEType: "text/html;profile=mcp-app", Text: panelHTML,
+			}}}, nil
+		})
+	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "terminal_monitor",
 		Description: "Show the read-only live terminal monitor in ChatGPT. Automatically selects the agent's active terminal and follows its output at the bottom by default; Refresh reloads both sessions and output. New agent-created terminals are automatically selected.",

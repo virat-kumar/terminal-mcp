@@ -65,8 +65,15 @@ func TestPanelMCPDiscovery(t *testing.T) {
 		}
 	}
 	resources := request("resources/list", map[string]any{})["resources"].([]any)
-	if len(resources) == 0 || resources[0].(map[string]any)["uri"] != panelURI {
+	if len(resources) == 0 || !bytes.Contains([]byte(fmt.Sprint(resources)), []byte(panelURI)) {
 		t.Fatalf("panel resource missing: %v", resources)
+	}
+	for _, uri := range []string{"ui://terminal-mcp/monitor-v1.html", "ui://terminal-mcp/monitor-v3.html"} {
+		legacy := request("resources/read", map[string]any{"uri": uri})["contents"].([]any)
+		if legacy[0].(map[string]any)["uri"] != uri ||
+			!bytes.Contains([]byte(legacy[0].(map[string]any)["text"].(string)), []byte("Follow: On")) {
+			t.Fatalf("cached monitor %s does not serve Follow UI", uri)
+		}
 	}
 	contents := request("resources/read", map[string]any{"uri": panelURI})["contents"].([]any)
 	html := contents[0].(map[string]any)["text"].(string)
