@@ -1,27 +1,23 @@
-# ChatGPT Terminal Monitor MCP App (Development)
+# ChatGPT Terminal Monitor
 
-This optional integration adds a read-only terminal monitor to the existing Terminal MCP server. It keeps all existing terminal tools and routes unchanged.
+This integration is read-only and maintains the existing Terminal MCP routes and permissions.
 
-## What it provides
+## Behavior
 
-- `terminal_monitor` MCP tool with an MCP Apps HTML resource at `ui://terminal-mcp/monitor-v1.html`.
-- A session selector, session count, refresh button, and terminal output with automatic polling.
-- OpenAI conversation-thread entrypoint metadata to allow opening the monitor in a chat-side tab when supported.
-- English-language panel labels and status messages.
-- No terminal input controls in the embedded panel. The original Terminal MCP tool permissions and identity checks still apply.
+- `terminal_monitor` opens the ChatGPT MCP Apps monitor.
+- `terminal_open` advertises the same UI resource so supported ChatGPT hosts present a **new live monitor** for each newly created PTY session. Actual placement and whether the host renders a separate panel is controlled by ChatGPT; the tool cannot force an external tab or side pane.
+- The active agent session is tracked per authenticated MCP owner when the agent opens, sends to, controls, checks status on, or explores a session. Viewer polling is *not* counted as agent activity.
+- On opening the monitor, the agent-active session is selected automatically. When another agent session is created, the monitor detects it within the periodic refresh interval and switches to it. A user can manually select any existing session.
+- **Follow: On** is the default. New output follows the vertical end of the terminal. Click Follow to turn it off, preserving the manual scroll position. Click it again to resume bottom-following.
+- **Refresh** immediately reloads the session list and terminal output. Session list and output are also updated periodically. A failed refresh displays an error and can be retried.
+- Terminal polling uses only `terminal_list` and `terminal_output(mode=tail)` and never sends commands, closes sessions, or enables human takeover.
+- New session presentation via tool metadata requires a host that supports MCP Apps tool UI metadata; older hosts can explicitly call `terminal_monitor`.
 
-## Development configuration
+## Verification
 
-Build the Go server on an isolated branch, run it on a separate development port, and connect that endpoint through a distinct secure tunnel and ChatGPT development plugin. Do not replace or restart production just to evaluate the panel.
+1. `go test ./...` verifies existing terminal behavior and UI discovery metadata.
+2. `NODE_PATH=/home/virat/.local/share/playwright-mcp/node_modules node scripts/panel-browser-test.cjs` tests the exact app HTML in a Chrome iframe, including selection, new sessions, Follow, Refresh and recovery.
+3. For a safe live test, build in Docker, run the binary on an isolated loopback port, and check MCP `tools/list`, `terminal_open`, `terminal_list`, `terminal_monitor`, `terminal_send`, `terminal_output`, and `terminal_close` with an authenticated test identity.
+4. When productionizing, save the original binary, deploy via an independent systemd job, verify the service and connector, and keep an automatic rollback timer until checks succeed.
 
-In the ChatGPT development plugin, call `terminal_monitor` in a conversation, then use **Open app in tab** to move the viewer to the conversation-side panel. The embedded viewer uses `tools/call` for `terminal_list` and `terminal_output` and polls for new terminal output.
-
-## Tests performed
-
-- `go test ./...` and `go test ./mcpserver -run TestPanelMCPDiscovery -v`.
-- MCP `tools/list`, `resources/list`, and `resources/read`, including the conversation-thread entrypoint metadata.
-- Development ChatGPT plugin connected through its own tunnel.
-- Verified iframe rendering of the live terminal session in ChatGPT.
-- Verified browser-side panel and automatic receipt of new output from the Ubuntu development terminal.
-
-Production deployment remains a separate manual decision. Changes are not merged into the existing production branch.
+Production runs through `terminal-mcp.service`; do not alter existing Tailscale Serve rules, desktop/Wayland settings, or unrelated MCP services as part of this change.
