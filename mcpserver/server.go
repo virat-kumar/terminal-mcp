@@ -63,6 +63,7 @@ func NewHTTPHandler(auditWriter io.Writer) http.Handler {
 func newMCPStreamableHandler(a *audit.Logger) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: serverName, Version: serverVersion}, nil)
 	registerTools(server, a)
+	registerPanel(server)
 	h := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true},
