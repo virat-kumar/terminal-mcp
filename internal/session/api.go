@@ -106,6 +106,37 @@ func Open(mode, command, host, owner string) (map[string]string, error) {
 //
 // Open 起持久真 PTY 会话。owner 为调用方归属签名（见 internal/identity），写入会话用于归属隔离。
 func OpenNamed(mode, command, host, owner, sessionName string) (map[string]string, error) {
+	if SingleTerminalMode() {
+		singleTerminalMu.Lock()
+		defer singleTerminalMu.Unlock()
+		sess, err := ensureSingleTerminalLocked()
+		if err != nil {
+			return nil, err
+		}
+		if sess == nil {
+			return nil, fmt.Errorf("single-terminal mode is enabled but no session is available")
+		}
+		if sess.Owner != "" && owner != "" && sess.Owner != owner {
+			return nil, fmt.Errorf("single-terminal mode is active and the persistent session belongs to another client")
+		}
+		if sess.Owner == "" {
+			sess.Owner = owner
+		}
+		if n := normalizeSessionName(sessionName); n != "" {
+			sess.setName(n)
+		}
+		state, _, _ := computeState(sess)
+		return map[string]string{
+			"session_id":   sess.ID,
+			"name":         sess.name(),
+			"state":        state,
+			"terminal_url": terminalURL(sess.ID),
+		}, nil
+	}
+	return openNamedRaw(mode, command, host, owner, sessionName)
+}
+
+func openNamedRaw(mode, command, host, owner, sessionName string) (map[string]string, error) {
 	switch mode {
 	case "local", "ssh":
 	default:

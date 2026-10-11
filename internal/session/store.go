@@ -252,7 +252,10 @@ type store struct {
 func newStore(max int) *store { return &store{max: max, m: map[string]*Session{}} }
 
 // InitStore 初始化全局会话表。
-func InitStore(maxSessions int) { theStore = newStore(maxSessions) }
+func InitStore(maxSessions int) {
+	theStore = newStore(maxSessions)
+	loadSingleTerminalMode()
+}
 
 func (s *store) add(sess *Session) bool {
 	s.mu.Lock()
@@ -290,6 +293,9 @@ func (s *store) list() []*Session {
 
 // gcIdle 关闭并移除空闲超过 ttl 的会话。
 func (s *store) gcIdle(ttl time.Duration) {
+	if SingleTerminalMode() {
+		return
+	}
 	s.mu.Lock()
 	victims := []*Session{}
 	for id, v := range s.m {

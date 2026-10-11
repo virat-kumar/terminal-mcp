@@ -11,6 +11,7 @@ import (
 // StartIdleGC 启动空闲会话回收协程；ctx 取消时回收全部会话并杀残留子进程。
 // 每分钟一轮：按 IdleTTLMinutes 回收空闲会话，并按 TranscriptRetentionDays 清理过期落盘。
 func StartIdleGC(ctx context.Context) {
+	startSingleTerminalGuard(ctx)
 	go func() {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
