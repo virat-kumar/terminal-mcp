@@ -10,6 +10,7 @@ import (
 	"github.com/fzxbl/terminal-mcp/internal/audit"
 	"github.com/fzxbl/terminal-mcp/internal/config"
 	"github.com/fzxbl/terminal-mcp/internal/session"
+	"github.com/fzxbl/terminal-mcp/internal/terminal"
 )
 
 // serverName/serverVersion 为 MCP Implementation 元信息。
@@ -50,6 +51,10 @@ func NewHTTPHandler(auditWriter io.Writer) http.Handler {
 	mux.Handle("/mcp", sessionRoutingMiddleware(newMCPStreamableHandler(a)))
 	// 网页终端走与嵌入宿主同一条挂载入口（挂在根上），因此路径推导只有一处实现。
 	_ = MountWebTerminal("", func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
+	mux.Handle("/api/sessions", terminal.SessionAPIHandler())
+	mux.Handle("/favicon.png", terminal.FaviconHandler())
+	mux.Handle("/favicon.ico", terminal.FaviconHandler())
+	mux.Handle("/", terminal.SessionIndexHandler())
 	return mux
 }
 
@@ -58,6 +63,7 @@ func NewHTTPHandler(auditWriter io.Writer) http.Handler {
 func newMCPStreamableHandler(a *audit.Logger) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: serverName, Version: serverVersion}, nil)
 	registerTools(server, a)
+	registerPanel(server)
 	h := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true},

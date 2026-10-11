@@ -137,7 +137,7 @@ func TestTerminalPageServed(t *testing.T) {
 	if !strings.Contains(page, id) {
 		t.Fatalf("page missing session id: %q", page[:min(200, len(page))])
 	}
-	if !strings.Contains(page, "人工接管") || !strings.Contains(page, "/ws") || !strings.Contains(page, "xterm") {
+	if !strings.Contains(page, "takeover") || !strings.Contains(page, "/ws") || !strings.Contains(page, "xterm") {
 		t.Fatalf("page missing takeover UI / xterm")
 	}
 	if !strings.Contains(page, "location.hash.slice(1)") || !strings.Contains(page, "X-Terminal-Capability") || !strings.Contains(page, "terminal-capability.") {

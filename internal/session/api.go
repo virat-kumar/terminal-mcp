@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/fzxbl/terminal-mcp/internal/config"
 )
@@ -133,8 +134,38 @@ func localIP() string {
 //	mode=ssh:   ssh 到 host 上起 bash，command 忽略
 //
 // 用 Status 轮询到 idle/ready 后再交互；terminal_url 供人在浏览器观看并可"人工接管"。
-// owner 在开会话时绑定（调用方标识，取自 X-MCP-USER），作为只读元信息随会话保存，不参与鉴权。
+// owner is descriptive metadata, not authentication. Existing sessions still
+// require a bearer capability even when single-terminal mode is enabled.
 func Open(mode, command, host, owner string) (map[string]string, error) {
+	return OpenNamed(mode, command, host, owner, "")
+}
+
+func OpenNamed(mode, command, host, owner, sessionName string, existingKey ...string) (map[string]string, error) {
+	if SingleTerminalMode() {
+		singleTerminalMu.Lock()
+		defer singleTerminalMu.Unlock()
+		sess := canonicalSessionLocked()
+		if sess != nil {
+			var key string
+			if len(existingKey) > 0 {
+				key = existingKey[0]
+			}
+			if !sess.matchesCapability(key) {
+				return nil, fmt.Errorf("single-terminal mode requires the existing session_key to reuse a terminal")
+			}
+			if sessionName != "" {
+				sess.setName(normalizeSessionName(sessionName))
+			}
+			state, _, _ := computeState(sess)
+			return map[string]string{"session_id": sess.ID, "session_key": key,
+				"name": sess.name(), "state": state,
+				"terminal_url": terminalURL(sess.ID, key)}, nil
+		}
+	}
+	return openNamedRaw(mode, command, host, owner, sessionName)
+}
+
+func openNamedRaw(mode, command, host, owner, sessionName string) (map[string]string, error) {
 	switch mode {
 	case "local", "ssh":
 	default:
@@ -160,9 +191,13 @@ func Open(mode, command, host, owner string) (map[string]string, error) {
 	if _, err := startSessionTracked(id, host, mode, name, args, owner, capability); err != nil {
 		return nil, err
 	}
+	if sess := theStore.get(id); sess != nil {
+		sess.setName(normalizeSessionName(sessionName))
+	}
 	return map[string]string{
 		"session_id":   id,
 		"session_key":  capability,
+		"name":         normalizeSessionName(sessionName),
 		"state":        "loading",
 		"terminal_url": terminalURL(id, capability),
 	}, nil
@@ -197,6 +232,9 @@ func List() []map[string]string {
 		out = append(out, map[string]string{
 			"session_id":   s.ID,
 			"owner":        s.Owner,
+			"name":         s.name(),
+			"mode":         s.Mode,
+			"created_at":   s.CreatedAt.UTC().Format(time.RFC3339Nano),
 			"host":         s.Host,
 			"status":       st,
 			"idle_seconds": strconv.Itoa(int(s.idleSince().Seconds())),
@@ -204,4 +242,37 @@ func List() []map[string]string {
 		})
 	}
 	return out
+}
+
+func Rename(id, name string) (string, bool) {
+	if theStore == nil {
+		return "", false
+	}
+	sess := theStore.get(id)
+	if sess == nil {
+		return "", false
+	}
+	val := normalizeSessionName(name)
+	sess.setName(val)
+	return val, true
+}
+
+func SessionName(id string) (string, bool) {
+	if theStore == nil {
+		return "", false
+	}
+	sess := theStore.get(id)
+	if sess == nil {
+		return "", false
+	}
+	return sess.name(), true
+}
+
+func normalizeSessionName(name string) string {
+	name = strings.TrimSpace(name)
+	runes := []rune(name)
+	if len(runes) > 120 {
+		name = string(runes[:120])
+	}
+	return name
 }

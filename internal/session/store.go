@@ -19,6 +19,7 @@ var theStore *store
 // Session 是一个持久会话。live 句柄 proc 只在内存；元信息可落盘。
 type Session struct {
 	ID             string
+	Name           string
 	Owner          string   // 开会话（Open）时绑定的调用方标识（X-MCP-USER）；只读元信息，不参与鉴权
 	capabilityHash [32]byte // bearer capability hash; plaintext is returned only by Open
 	Host           string
@@ -55,6 +56,18 @@ type Session struct {
 	takeoverStart  int64
 	takeoverEnd    int64
 	takeoverActive bool
+}
+
+func (s *Session) setName(name string) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.Name = name
+}
+
+func (s *Session) name() string {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.Name
 }
 
 func (s *Session) setCapability(capability string) {
@@ -306,6 +319,9 @@ func (s *store) list() []*Session {
 
 // gcIdle 关闭并移除空闲超过 ttl 的会话。
 func (s *store) gcIdle(ttl time.Duration) {
+	if SingleTerminalMode() {
+		return
+	}
 	s.mu.Lock()
 	victims := []*Session{}
 	for id, v := range s.m {

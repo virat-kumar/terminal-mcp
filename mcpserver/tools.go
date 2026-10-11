@@ -18,9 +18,11 @@ import (
 // 官方 SDK 的泛型 AddTool 会据此自动推断 input schema 并在进入 handler 前完成校验。
 
 type openInput struct {
-	Mode    string `json:"mode" jsonschema:"session mode: \"local\" (spawn a shell/command on this host) or \"ssh\" (ssh into host and run bash)"`
-	Command string `json:"command,omitempty" jsonschema:"local mode only: optional command to run instead of the default shell; ignored for ssh mode"`
-	Host    string `json:"host,omitempty" jsonschema:"ssh mode only: target host to ssh into; required when mode=ssh, ignored for local mode"`
+	Mode       string `json:"mode" jsonschema:"session mode: \"local\" (spawn a shell/command on this host) or \"ssh\" (ssh into host and run bash)"`
+	Command    string `json:"command,omitempty" jsonschema:"local mode only: optional command to run instead of the default shell; ignored for ssh mode"`
+	Host       string `json:"host,omitempty" jsonschema:"ssh mode only: target host to ssh into; required when mode=ssh, ignored for local mode"`
+	Name       string `json:"name,omitempty" jsonschema:"optional display name"`
+	SessionKey string `json:"session_key,omitempty" jsonschema:"existing capability if reusing a persistent single session"`
 }
 
 type sendInput struct {
@@ -63,16 +65,27 @@ type sessionIDInput struct {
 }
 
 type emptyInput struct{}
+type monitorInput struct {
+	SessionID  string `json:"session_id,omitempty" jsonschema:"session to follow"`
+	SessionKey string `json:"session_key,omitempty" jsonschema:"existing session capability, never log this"`
+}
+type monitorOutput struct {
+	Sessions        []map[string]string `json:"sessions"`
+	ActiveSessionID string              `json:"active_session_id,omitempty"`
+	SessionID       string              `json:"session_id,omitempty"`
+	SessionKey      string              `json:"session_key,omitempty"`
+}
 
 // listOutput 包装会话列表：官方 SDK 要求工具输出为 JSON object，顶层数组不被接受。
 type listOutput struct {
-	Sessions []map[string]string `json:"sessions" jsonschema:"active sessions with status snapshot (session_id, host, status, idle_seconds, held)"`
+	Sessions        []map[string]string `json:"sessions" jsonschema:"active sessions with status snapshot (session_id, host, status, idle_seconds, held)"`
+	ActiveSessionID string              `json:"active_session_id,omitempty" jsonschema:"last terminal actively used by agent"`
 }
 
 // 工具描述（英文）。涵盖 PTY 会话、local/ssh 模式、
 // 人工接管 held 语义、output 的 tail vs since_last 差异等关键指引。
 const (
-	descOpen = "Start a persistent real PTY session and return {session_id, session_key, state, terminal_url}. Retain session_key securely and pass it with session_id to every session operation; it is shown only once. " +
+	descOpen = "Start a persistent real PTY session and return {session_id, session_key, state, terminal_url}. Retain session_key securely and pass it with session_id to every session operation; it is shown only once. New ChatGPT sessions can display a read-only monitor, provided the session capability is supplied. " +
 		"mode=local spawns a shell (or the given command) on this host; mode=ssh opens 'ssh <host>' running bash (host is required). " +
 		"The session starts in state=loading; poll terminal_status until it becomes idle before interacting. " +
 		"terminal_url is a read-only web terminal a human can open to watch the session live, and optionally 'take over' to type commands manually. " +
@@ -166,17 +179,18 @@ func resolveDesc(name string) string {
 // 每个 handler 计算结果后调用 audit.Logger 记录一条审计。CallerIP 从 HTTP 请求头解析
 // （官方 SDK 通过 CallToolRequest.Extra.Header 把 HTTP header 透传给每个工具 handler）。
 func registerTools(server *mcp.Server, a *audit.Logger) {
-	mcp.AddTool(server, &mcp.Tool{Name: "terminal_open", Description: resolveDesc("terminal_open")},
+	mcp.AddTool(server, &mcp.Tool{Name: "terminal_open", Description: resolveDesc("terminal_open"), Meta: panelMeta()},
 		func(_ context.Context, req *mcp.CallToolRequest, in openInput) (*mcp.CallToolResult, map[string]string, error) {
 			owner := mcpUser(reqHeader(req))
-			res, err := session.Open(in.Mode, in.Command, in.Host, owner)
+			res, err := session.OpenNamed(in.Mode, in.Command, in.Host, owner, in.Name, in.SessionKey)
 			e := baseEntry(req, "terminal_open", map[string]any{
-				"mode": in.Mode, "host": in.Host, "command": in.Command,
+				"mode": in.Mode, "host": in.Host, "command": in.Command, "name": in.Name,
 			})
 			if err != nil {
 				e.Error = err.Error()
 			} else {
 				e.State = res["state"]
+				setActiveAgentSession(owner, res["session_id"])
 			}
 			a.Log(e)
 			return nil, res, err
@@ -189,6 +203,7 @@ func registerTools(server *mcp.Server, a *audit.Logger) {
 				logEnv(a, req, "terminal_send", map[string]any{"session_id": in.SessionID}, env)
 				return nil, env, nil
 			}
+			setActiveAgentSession(mcpUser(reqHeader(req)), in.SessionID)
 			env := session.Send(in.SessionID, in.Input, in.WaitMs)
 			logEnv(a, req, "terminal_send", map[string]any{
 				"session_id": in.SessionID, "input": in.Input, "wait_ms": in.WaitMs,
@@ -217,6 +232,7 @@ func registerTools(server *mcp.Server, a *audit.Logger) {
 				logEnv(a, req, "terminal_explore", map[string]any{"session_id": in.SessionID, "op": in.Op, "output_ref": in.OutputRef}, env)
 				return nil, env, nil
 			}
+			setActiveAgentSession(mcpUser(reqHeader(req)), in.SessionID)
 			env := session.Explore(in.SessionID, session.ExploreArgs{
 				OutputRef: in.OutputRef, Op: in.Op,
 				LineOffset: in.LineOffset, ByteOffset: in.ByteOffset, Limit: in.Limit, Pattern: in.Pattern,
@@ -235,6 +251,7 @@ func registerTools(server *mcp.Server, a *audit.Logger) {
 				logEnv(a, req, "terminal_control", map[string]any{"session_id": in.SessionID, "key": in.Key}, env)
 				return nil, env, nil
 			}
+			setActiveAgentSession(mcpUser(reqHeader(req)), in.SessionID)
 			env := session.Control(in.SessionID, in.Key)
 			logEnv(a, req, "terminal_control", map[string]any{
 				"session_id": in.SessionID, "key": in.Key,
@@ -249,6 +266,7 @@ func registerTools(server *mcp.Server, a *audit.Logger) {
 				logEnv(a, req, "terminal_status", map[string]any{"session_id": in.SessionID}, env)
 				return nil, env, nil
 			}
+			setActiveAgentSession(mcpUser(reqHeader(req)), in.SessionID)
 			env := session.Status(in.SessionID)
 			logEnv(a, req, "terminal_status", map[string]any{"session_id": in.SessionID}, env)
 			return nil, env, nil
@@ -278,7 +296,7 @@ func registerTools(server *mcp.Server, a *audit.Logger) {
 			e := baseEntry(req, "terminal_list", nil)
 			e.Bytes = len(all)
 			a.Log(e)
-			return nil, listOutput{Sessions: all}, nil
+			return nil, listOutput{Sessions: all, ActiveSessionID: activeAgentSession(mcpUser(reqHeader(req)))}, nil
 		})
 }
 
